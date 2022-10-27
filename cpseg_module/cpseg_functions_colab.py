@@ -13,6 +13,7 @@ from joblib import Parallel, delayed
 from glob import glob
 import time
 from random import randint
+from skan import Skeleton, summarize, skeleton_to_csgraph
 
 def rot_edge(irot,values):
     # Variables
@@ -278,3 +279,39 @@ def ak_post_process(BW,smallNoiseRemov,senoise,neib,select_biggest,nskeletonize)
     BWlast = BW_skel
     
     return BWlast
+
+def postprocessing(bw_img):
+    # Dilate edge
+    dilation_repeats = 4
+    kernel_size = 3
+    disk_dil = disk(kernel_size)
+
+    bw_img_uint8 = bw_img.astype('uint8')
+    bw_dil = cv2.dilate(bw_img_uint8, disk_dil, iterations=dilation_repeats)
+    skeleton = skeletonize(bw_dil).astype(np.uint8)
+
+    # Select largest connected component except background
+    n_labels_concomp, labels, stats, centriods = cv2.connectedComponentsWithStats(skeleton)
+    area = stats[:, cv2.CC_STAT_WIDTH] * stats[:, cv2.CC_STAT_HEIGHT]
+    skeleton2 = np.where(labels == area.argsort()[-2], 1, 0)  # Avoid the largest component which is background
+    # Evaluation of connectivity
+
+    # Prune branches
+    rep = 0
+    for rep in range(2):
+        skeleton2 = prune_branch(skeleton2).astype(np.uint8)
+        skeleton2 = cv2.dilate(skeleton2, disk(1), iterations=1)
+        skeleton2 = skeletonize(skeleton2).astype(np.uint8)
+        rep = + 1
+
+    return skeleton2
+
+def prune_branch(skeleton):
+    df = summarize(Skeleton(skeleton))
+    j2e_idx = df.index.values[df['branch-type'] == 1]  # junction-to-endpoint
+    skeleton2 = np.copy(skeleton)
+    for i in np.arange(np.shape(j2e_idx)[0]):
+        raw_list = Skeleton.path_coordinates(Skeleton(skeleton), j2e_idx[i]).astype('uint16')
+        for j in np.arange(raw_list.shape[0]):
+            skeleton2[raw_list[j][0]][raw_list[j][1]] = 0
+    return skeleton2
