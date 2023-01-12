@@ -14,6 +14,7 @@ from glob import glob
 import time
 from random import randint
 from skan import Skeleton, summarize, skeleton_to_csgraph
+from scipy import interpolate
 
 def rot_edge(irot,values):
     # Variables
@@ -280,7 +281,7 @@ def ak_post_process(BW,smallNoiseRemov,senoise,neib,select_biggest,nskeletonize)
     
     return BWlast
 
-def postprocessing(bw_img):
+def postprocess(bw_img, min_j2e_size=1000000):
     # Dilate edge
     dilation_repeats = 4
     kernel_size = 3
@@ -290,28 +291,145 @@ def postprocessing(bw_img):
     bw_dil = cv2.dilate(bw_img_uint8, disk_dil, iterations=dilation_repeats)
     skeleton = skeletonize(bw_dil).astype(np.uint8)
 
+    # fig, ax = plt.subplots()  # test
+    # ax.imshow(skeleton, cmap='gray')  # test
+    # ax.set_title(f'Post-processing input')  # test
+    # plt.show()# test
+
     # Select largest connected component except background
-    n_labels_concomp, labels, stats, centriods = cv2.connectedComponentsWithStats(skeleton)
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(skeleton)
     area = stats[:, cv2.CC_STAT_WIDTH] * stats[:, cv2.CC_STAT_HEIGHT]
-    skeleton2 = np.where(labels == area.argsort()[-2], 1, 0)  # Avoid the largest component which is background
-    # Evaluation of connectivity
+    #print(f'Number of connected components: {area.size}')#test
+    if area.size > 1:
+        skeleton2 = np.where(labels == area.argsort()[-2], 1, 0)  # Avoid the largest component which is background
+
+        # fig, ax = plt.subplots()  # test
+        # ax.imshow(skeleton2, cmap='gray')  # test
+        # ax.set_title(f'Select 2nd largest connected component')  # test
+        # plt.show()  # test
+
+        # # Prune branches
+        # _, _, stats2, _ = cv2.connectedComponentsWithStats(skeleton2.astype('int8'))
+        # if np.count_nonzero(stats2[:,4] > 10) > 1: # If the number of component with height > 10 pixel is more than 2
+        #     skeleton2 = prune_branch(skeleton2, min_j2e_size).astype(np.uint8)
+        #
+        #     # fig,ax = plt.subplots()#test
+        #     # ax.imshow(skeleton2, cmap='gray')#test
+        #     # ax.set_title(f'prune_branch_{rep_i}') #test
+        #     # plt.show()  # test
+
+    elif area.size <= 1: # Number of connected components
+        skeleton2 = np.copy(skeleton)
 
     # Prune branches
-    rep = 0
-    for rep in range(2):
-        skeleton2 = prune_branch(skeleton2).astype(np.uint8)
-        skeleton2 = cv2.dilate(skeleton2, disk(1), iterations=1)
-        skeleton2 = skeletonize(skeleton2).astype(np.uint8)
-        rep = + 1
+    skeleton2 = prune_branch(skeleton2, min_j2e_size).astype(np.uint8)
 
     return skeleton2
 
-def prune_branch(skeleton):
-    df = summarize(Skeleton(skeleton))
-    j2e_idx = df.index.values[df['branch-type'] == 1]  # junction-to-endpoint
-    skeleton2 = np.copy(skeleton)
-    for i in np.arange(np.shape(j2e_idx)[0]):
-        raw_list = Skeleton.path_coordinates(Skeleton(skeleton), j2e_idx[i]).astype('uint16')
-        for j in np.arange(raw_list.shape[0]):
-            skeleton2[raw_list[j][0]][raw_list[j][1]] = 0
+def prune_branch(skeleton, min_j2e_size = 1000000):
+    if np.max(skeleton) == 0: # No edge
+        skeleton1 = np.copy(skeleton)
+    elif np.max(skeleton) == 1:
+        # Get skeleton info
+        skeleton_obj = Skeleton(skeleton)
+        df = summarize(skeleton_obj)
+        branch_list = df[df["branch-type"] == 1]  # List of junction-to-endpoint paths
+        j2e_idx = df.index.values[(df['branch-type'] == 1) & (df['branch-distance'] < min_j2e_size)]  #junction-to-endpoint less than min_j2e_size(pixels)
+
+        if skeleton_obj.n_paths == 1: # Only 1 path in the object
+            skeleton1 = skeleton_obj.skeleton_image # No pruning
+        elif skeleton_obj.n_paths >= 2:
+            nPrune = 0
+            #if np.any(j2e_idx) == True: #If j2e paths exist
+            #while np.any(j2e_idx) == True:
+            while np.size(j2e_idx) >= 1:
+            #while branch_list.loc[:, 'branch-distance'].min() < min_j2e_size: # Filter with branch length, while min j2e path < min_j2e_size
+                for i in np.arange(np.size(j2e_idx)):
+                    raw_list = Skeleton.path_coordinates(skeleton_obj, j2e_idx[i]).astype('uint16')
+                    for j in np.arange(raw_list.shape[0]):
+                        skeleton[raw_list[j][0]][raw_list[j][1]] = 0 # Update skeleton
+
+                # fig,ax = plt.subplots()#test
+                # ax.imshow(skeleton, cmap='gray')#test
+                # ax.set_title(f'pruned') #test
+                # plt.show()  # test
+
+                # Fill gaps
+                skeleton = cv2.dilate(skeleton.astype(np.uint8), disk(1), iterations=1) # Dilation
+
+                # fig,ax = plt.subplots()#test
+                # ax.imshow(skeleton, cmap='gray')#test
+                # ax.set_title(f'Dilated') #test
+                # plt.show()  # test
+
+                skeleton = skeletonize(skeleton).astype(np.uint8) # Skeletonize
+
+                # fig,ax = plt.subplots()#test
+                # ax.imshow(skeleton, cmap='gray')#test
+                # ax.set_title(f'Skeletonized') #test
+                # plt.show()  # test
+
+                # Updated skeleton info
+                skeleton_obj = Skeleton(skeleton)
+                df = summarize(skeleton_obj)
+                branch_list = df[df["branch-type"] == 1] # List of junction-to-endpoint paths after the pruning
+                j2e_idx = df.index.values[(df['branch-type'] == 1) & (df['branch-distance'] < min_j2e_size)]
+
+                nPrune += 1
+                print(f'prune repeat: {nPrune}')
+
+                # fig,ax = plt.subplots()#test
+                # ax.imshow(skeleton, cmap='gray')#test
+                # ax.set_title(f'Pruning repeat: {nPrune}')#test
+                # plt.show()  # test
+
+            else:
+                skeleton1 = skeleton_obj.skeleton_image
+
+
+    return skeleton1
+
+def find_ends(skeleton):
+    if np.max(skeleton) == 1:
+        skeleton0 = Skeleton(skeleton)
+        endpoint_coordinates = skeleton0.coordinates[np.nonzero(skeleton0.degrees == 1)] # degree: number of neighbouring pixels
+    elif np.max(skeleton) == 0:
+        endpoint_coordinates = np.zeros(1)
+
+    return endpoint_coordinates
+
+def connect_ends(skeleton1, min_j2e_size = 1000000):
+    # Classify
+    #skeleton1 = prune_branch(skeleton, min_j2e_size)
+
+    # Connect_ends
+    end_coordinates = find_ends(skeleton1)
+
+    skeleton2 = np.copy(skeleton1)
+    if np.shape(end_coordinates)[0] == 2:
+        e1 = end_coordinates[0,:].astype(int)
+        e2 = end_coordinates[1,:].astype(int)
+        x = [e1[1], e2[1]]
+        y = [e1[0], e2[0]]
+        if abs(e1[1] - e2[1]) >= abs(e1[0] - e2[0]):
+            point = np.abs(e1[1] - e2[1]).astype(int)
+            f = interpolate.interp1d(x, y)
+            X = np.linspace(e1[1], e2[1], num=point + 1, endpoint=True).astype(int)
+            Y = f(X)
+            Yr = np.round(Y).astype(int)
+            index = np.stack([Yr, X], axis=1)
+            index = index[~np.isnan(index.any(axis=1)),:]
+            for i in np.arange(index.shape[0]):
+                skeleton2[index[i,0],index[i,1]] = 1
+        else:
+            point = np.abs(e1[0] - e2[0]).astype(int)
+            f = interpolate.interp1d(y, x)
+            Y = np.linspace(e1[0], e2[0], num=point + 1, endpoint=True).astype(int)
+            X = f(Y)
+            Xr = np.round(X).astype(int)
+            index = np.stack([Y, Xr], axis=1)
+            index2 = index[~np.isnan(index.any(axis=1)),:]
+            for i in np.arange(index2.shape[0]):
+                skeleton2[index2[i, 0], index2[i, 1]] = 1
+
     return skeleton2
