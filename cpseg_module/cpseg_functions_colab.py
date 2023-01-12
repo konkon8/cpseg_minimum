@@ -376,7 +376,7 @@ def prune_branch(skeleton, min_j2e_size = 1000000):
                 j2e_idx = df.index.values[(df['branch-type'] == 1) & (df['branch-distance'] < min_j2e_size)]
 
                 nPrune += 1
-                print(f'prune repeat: {nPrune}')
+                #print(f'prune repeat: {nPrune}')
 
                 # fig,ax = plt.subplots()#test
                 # ax.imshow(skeleton, cmap='gray')#test
