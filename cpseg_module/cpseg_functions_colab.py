@@ -327,9 +327,9 @@ def postprocess(bw_img, min_j2e_size=1000000):
     return skeleton2
 
 def prune_branch(skeleton, min_j2e_size = 1000000):
-    if np.max(skeleton) == 0: # No edge
+    if np.count_nonzero(skeleton == 1) <= 10:
         skeleton1 = np.copy(skeleton)
-    elif np.max(skeleton) == 1:
+    elif np.count_nonzero(skeleton == 1) > 10:
         # Get skeleton info
         skeleton_obj = Skeleton(skeleton)
         df = summarize(skeleton_obj)
@@ -370,13 +370,17 @@ def prune_branch(skeleton, min_j2e_size = 1000000):
                 # plt.show()  # test
 
                 # Updated skeleton info
-                skeleton_obj = Skeleton(skeleton)
-                df = summarize(skeleton_obj)
-                branch_list = df[df["branch-type"] == 1] # List of junction-to-endpoint paths after the pruning
-                j2e_idx = df.index.values[(df['branch-type'] == 1) & (df['branch-distance'] < min_j2e_size)]
-
+                if np.count_nonzero(skeleton == 1) <= 10:
+                    j2e_idx = []
+                    skeleton1 = np.zeros_like(skeleton)
+                elif np.count_nonzero(skeleton == 1) > 10:
+                    skeleton_obj = Skeleton(skeleton)
+                    df = summarize(skeleton_obj)
+                    branch_list = df[df["branch-type"] == 1] # List of junction-to-endpoint paths after the pruning
+                    j2e_idx = df.index.values[(df['branch-type'] == 1) & (df['branch-distance'] < min_j2e_size)]
+                    skeleton1 = np.copy(skeleton)
                 nPrune += 1
-                #print(f'prune repeat: {nPrune}')
+                print(f'prune repeat: {nPrune}')
 
                 # fig,ax = plt.subplots()#test
                 # ax.imshow(skeleton, cmap='gray')#test
@@ -390,10 +394,11 @@ def prune_branch(skeleton, min_j2e_size = 1000000):
     return skeleton1
 
 def find_ends(skeleton):
-    if np.max(skeleton) == 1:
+    _, _, stats, _ = cv2.connectedComponentsWithStats(skeleton)
+    if np.count_nonzero(skeleton == 1) > 10:
         skeleton0 = Skeleton(skeleton)
         endpoint_coordinates = skeleton0.coordinates[np.nonzero(skeleton0.degrees == 1)] # degree: number of neighbouring pixels
-    elif np.max(skeleton) == 0:
+    elif np.count_nonzero(skeleton == 1) <= 10:
         endpoint_coordinates = np.zeros(1)
 
     return endpoint_coordinates
