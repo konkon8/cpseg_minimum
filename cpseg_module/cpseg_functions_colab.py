@@ -205,84 +205,6 @@ def ak_get_edge(I, numBorder, model, y_interval, penalty_value, changepoint_algo
 
     return BW
 
-# def ak_post_process(BW,smallNoiseRemov,senoise,neib,select_biggest,nskeletonize):
-#     """
-#     Post processing edge maps by removing small noises etc.
-#
-#     Parameters
-#     ----------
-#     BW : numpyndarray, int
-#          2D Edge map
-#     smallNoiseRemov : int
-#          0:No noise removal
-#          1:Connect border, then remove small noises
-#          2:Remove small noisess first, then connect
-#     senoise : int
-#          Structural element size
-#     neib : int
-#          Area of imclose, pix
-#     select_biggest : int
-#          0: do not select
-#          1: select biggest
-#     nskeletonize : int
-#          0: No skeletonization
-#          1: Skeletonize
-#
-#     Returns BWlast
-#     -------
-#
-#     """
-#
-#     # Remove signal at the edge
-#     #BW = clear_border(BW) # remove artifacts connected to image border
-#
-#     # Remove small objects
-#     BW = BW.astype('uint8')
-#     se_noiseremove = disk(senoise) #structual elements, circle
-#     if smallNoiseRemov == 0: # No noise removal
-#         BWs = BW
-#     elif smallNoiseRemov == 1:  #Connect border -> Remove small noise
-#         BW1 = morphologyEx(BW, MORPH_CLOSE, se_noiseremove) # Connect border
-#         BW1_labels = label(BW1)
-#         BWs = remove_small_objects(BW1_labels, min_size=neib) # Remove small object
-#
-#     elif smallNoiseRemov == 2:  # Remove small noises -> Connect border
-#         BW_labels = label(BW)
-#         BW1 = remove_small_objects(BW_labels, min_size=neib) # Remove small object
-#         BWs = morphologyEx(BW1, MORPH_CLOSE, se_noiseremove) # Connect border
-#     else:
-#         print('smallNoiseRemov should be 0,1,2.')
-#     BWs = np.where(BWs != 0, 1, 0)
-#
-#     # Select largest component (segmentation)
-#     if select_biggest == 0:
-#         BWs_biggest = BWs
-#     elif select_biggest == 1:
-#         label_BWs = label(BWs, return_num=True)  # Label connected components
-#         label_image = label_BWs[0]  # labeled image
-#         properties = ['label', 'area']
-#         df = pd.DataFrame(regionprops_table \
-#                               (label_image, properties=properties))  # Data frome of area and label
-#         df_area_max = np.max(df.area)  # Area of largest component
-#         max_index = np.array(np.where(df.area == df_area_max))  # label of the largest component
-#         label_image_largest = np.where(label_image == (max_index + 1), 1,
-#                                        0)  # replace the largest region w/ 1 and others with 0
-#         BWs_biggest = np.where(label_image_largest != 0, 1, 0)  # Replace non-zero elements to 1
-#     else:
-#         print('BWs_biggest should be 0 or 1.')
-#
-#     # Reduce object to 1-pixel wide curved lines
-#     if nskeletonize == 0:
-#         BW_skel = BWs_biggest
-#     elif nskeletonize == 1:
-#         BW_skel = skeletonize(BWs_biggest)
-#     else:
-#         print('nskeletonize should be 0 or 1.')
-#
-#     BWlast = BW_skel
-#
-#     return BWlast
-
 def postprocess(bw_img, min_j2e_size=1000000, cycle_max_pixel = 500, remove_cycle_var = 1):
     # Dilate edge
     dilation_repeats = 4
@@ -411,15 +333,6 @@ def connect_ends(edge,skeleton1, min_j2e_size = 1000000, connect_method = 2):
                     skeleton2 = cv2.dilate(skeleton2_uint8, disk_dil, iterations=dilation_repeats)
                     skeleton2 = skeletonize(skeleton2).astype(np.uint8)
                     skeleton2 = remove_j2e(skeleton2)
-                    # if np.count_nonzero(skeleton2 == 1) > 10:
-                    #     skeleton2_obj = Skeleton(skeleton2)  # Get skeleton object
-                    #     df2 = summarize(skeleton2_obj)  # Get dataframe
-                    #     j2e2_idx = df2.index.values[(df2['branch-type'] == 1)]  # Get id of junction-to-endpoint path
-                    #     for i, i_j2e2_idx in enumerate(j2e2_idx):
-                    #         #if df2['branch-distance'].values[i_j2e2_idx] < 200:  # Max size of pruning branch
-                    #         j2e_coordinates = Skeleton.path_coordinates(skeleton2_obj, i_j2e2_idx).astype('uint16')  # Get path coordinates
-                    #         for j in np.arange(j2e_coordinates.shape[0]):
-                    #             skeleton2[j2e_coordinates[j][0]][j2e_coordinates[j][1]] = 0
 
     #%% Three ends
     elif np.shape(end_coordinates)[0] >= 3: # Three ends
@@ -573,7 +486,6 @@ def get_edge_density(edge, e1, e2):
             sum_edge_value = sum_edge_value + edge_value_i
         avr_edge_value = np.floor((sum_edge_value / pixels_between_ends) * 100).astype('uint8')
     return avr_edge_value, index
-
 
 def get_lsp(skeleton1):
     if np.count_nonzero(skeleton1 == 1) > 10:
