@@ -398,14 +398,14 @@ def connect_ends(edge,skeleton1, min_j2e_size = 1000000, connect_method = 2):
         # Remove resulting branch
         skeleton2 = remove_j2e(skeleton2)
 
-    # Dilate edge
-    dilation_repeats = 4
-    kernel_size = 3
-    disk_dil = disk(kernel_size)
-    skeleton2_uint8 = skeleton2.astype('uint8')
-    skeleton2 = cv2.dilate(skeleton2_uint8, disk_dil, iterations=dilation_repeats)
-    skeleton2 = skeletonize(skeleton2).astype(np.uint8)
-    skeleton2 = remove_j2e(skeleton2)
+        # Dilate edge
+        dilation_repeats = 4
+        kernel_size = 3
+        disk_dil = disk(kernel_size)
+        skeleton2_uint8 = skeleton2.astype('uint8')
+        skeleton2 = cv2.dilate(skeleton2_uint8, disk_dil, iterations=dilation_repeats)
+        skeleton2 = skeletonize(skeleton2).astype(np.uint8)
+        skeleton2 = remove_j2e(skeleton2)
 
     return skeleton2
 
