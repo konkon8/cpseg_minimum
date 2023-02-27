@@ -2,7 +2,7 @@
 
 ## 
 This is a workflow to extract contour from zebrafish embryo images.
-The codes work on Google Scholar.
+The codes work on Google Colaboratory.
 The code "pipeline_colab.ipynb" is for a 2D image.
 The code "pipeline_colab_4d.ipynb" is for an image stack with a dimension higher than 3.
 
